@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Data (large; download per README — not shipped)
+data/*.csv
+
+# Editor / tooling cruft
+.notebook/
+.ipynb_checkpoints/
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+data/liar/
+
+# Saved transformer checkpoint (255MB, regenerable via run_transformer_multiseed.py)
+models/bert_isot_*/
