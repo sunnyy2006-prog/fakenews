@@ -3,6 +3,7 @@
 from pathlib import Path
 import re
 import sys
+import os
 
 import gradio as gr
 import joblib
@@ -153,4 +154,7 @@ with gr.Blocks(css=CSS, title="FactVerse · AI Fake News Detection", theme=gr.th
 
 
 if __name__ == "__main__":
-    demo.launch()
+    demo.launch(
+        server_name="0.0.0.0",
+        server_port=int(os.environ.get("PORT", "7860")),
+    )
