@@ -63,10 +63,18 @@ def load_dataset_examples(limit=500):
 DATASET_EXAMPLES = load_dataset_examples()
 
 
-def suggest_example():
+def suggest_example(previous_label=None):
     if not DATASET_EXAMPLES:
         return "", "", None, PLACEHOLDER
-    title, body, label = random.choice(DATASET_EXAMPLES)
+    available_labels = {example[2] for example in DATASET_EXAMPLES}
+    if previous_label in {"TRUE", "FAKE"}:
+        label = "FAKE" if previous_label == "TRUE" else "TRUE"
+        if label not in available_labels:
+            label = previous_label
+    else:
+        label = random.choice(sorted(available_labels))
+    candidates = [example for example in DATASET_EXAMPLES if example[2] == label]
+    title, body, label = random.choice(candidates)
     return title, body, label, PLACEHOLDER
 
 
@@ -194,8 +202,8 @@ with gr.Blocks(css=CSS, title="FactVerse · AI Fake News Detection", theme=gr.th
             output = gr.HTML(value=PLACEHOLDER)
     check.click(classify, inputs=[title, statement, dataset_label], outputs=output)
     statement.submit(classify, inputs=[title, statement, dataset_label], outputs=output)
-    suggest.click(suggest_example, outputs=[title, statement, dataset_label, output])
-    demo.load(suggest_example, outputs=[title, statement, dataset_label, output])
+    suggest.click(suggest_example, inputs=dataset_label, outputs=[title, statement, dataset_label, output])
+    demo.load(suggest_example, inputs=dataset_label, outputs=[title, statement, dataset_label, output])
     gr.HTML(
         "<div style='position:relative;z-index:1'><p class='dataset-title'>Training Dataset</p>"
         "<section class='dataset-grid'><div class='dataset-card'><div class='dataset-icon'>✓</div><div><b>21,417</b><span>True articles</span></div></div>"
