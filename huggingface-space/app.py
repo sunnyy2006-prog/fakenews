@@ -1,6 +1,8 @@
 """FactVerse UI for the local and Hugging Face fake-news classifier."""
 
 from pathlib import Path
+import csv
+import random
 import re
 import sys
 import os
@@ -33,7 +35,42 @@ if not MODEL_PATH.exists():
 pipeline = joblib.load(MODEL_PATH)
 
 
-def classify(title, statement):
+def load_dataset_examples(limit=500):
+    """Keep a small random pool so suggestions can change without loading the CSVs per request."""
+    examples = []
+    for filename, label in (("True.csv", "TRUE"), ("Fake.csv", "FAKE")):
+        path = ROOT / "dataset" / filename
+        if not path.exists():
+            continue
+        reservoir = []
+        with path.open("r", encoding="utf-8", errors="replace", newline="") as source:
+            for row_number, row in enumerate(csv.DictReader(source), start=1):
+                title = (row.get("title") or "").strip()
+                body = (row.get("text") or "").strip()
+                if not title and not body:
+                    continue
+                item = (title, body, label)
+                if len(reservoir) < limit:
+                    reservoir.append(item)
+                else:
+                    index = random.randint(1, row_number)
+                    if index <= limit:
+                        reservoir[index - 1] = item
+        examples.extend(reservoir)
+    return examples
+
+
+DATASET_EXAMPLES = load_dataset_examples()
+
+
+def suggest_example():
+    if not DATASET_EXAMPLES:
+        return "", "", None, PLACEHOLDER
+    title, body, label = random.choice(DATASET_EXAMPLES)
+    return title, body, label, PLACEHOLDER
+
+
+def classify(title, statement, dataset_label=None):
     raw = f"{(title or '').strip()} {(statement or '').strip()}".strip()
     if not raw:
         return (
@@ -46,8 +83,16 @@ def classify(title, statement):
     is_fake = prediction == 1
     kind = "fake" if is_fake else "true"
     label = "FAKE" if is_fake else "TRUE"
+    dataset_note = ""
+    if dataset_label:
+        dataset_note = (
+            f"<p style='color:#94a3b8;text-align:center;margin:12px 0 0'>"
+            f"Dataset label: <strong>{dataset_label}</strong></p>"
+        )
     return (
-        f"<section class='result-panel prediction-only {kind}'><div class='prediction-value'>{label}</div></section>"
+        f"<section class='result-panel prediction-only {kind}'>"
+        f"<div class='prediction-value'>{label}</div>"
+        f"<div style='text-align:center;color:#94a3b8'>Model prediction{dataset_note}</div></section>"
     )
 
 
@@ -89,6 +134,7 @@ input::placeholder,textarea::placeholder { color:#64748b!important; } input:focu
 #article,#article textarea { min-height:190px!important; }
 .analyze-btn,.analyze-btn button { width:100%!important; min-height:54px!important; background:var(--electric)!important; color:var(--navy)!important; border:0!important; border-radius:12px!important; font-weight:700!important; font-size:16px!important; box-shadow:0 8px 30px #00d4ff27!important; transition:transform .2s,background .2s!important; }
 .analyze-btn:hover,.analyze-btn button:hover { background:#fff!important; transform:translateY(-1px); }
+.suggest-btn,.suggest-btn button { width:100%!important; min-height:46px!important; background:#14243a!important; color:#dbeafe!important; border:1px solid #00d4ff55!important; border-radius:12px!important; font-weight:600!important; }
 .placeholder-panel,.result-panel { min-height:360px; height:100%; border-radius:18px; padding:28px; background:rgba(13,22,38,.78); backdrop-filter:blur(14px); border:1px solid #ffffff1c; box-shadow:0 20px 60px #0007; }
 .prediction-only { display:grid; place-items:center; }
 .prediction-value { font-size:clamp(48px,7vw,76px); font-weight:700; letter-spacing:.08em; text-shadow:0 0 32px currentColor; }
@@ -140,11 +186,16 @@ with gr.Blocks(css=CSS, title="FactVerse · AI Fake News Detection", theme=gr.th
                 )
                 title = gr.Textbox(label="Headline", placeholder="e.g. Breaking: Local report reveals…", lines=1, elem_id="headline")
                 statement = gr.Textbox(label="Article Text", placeholder="Paste the news statement or full article here…", lines=8, elem_id="article")
-                check = gr.Button("Check News", variant="primary", elem_classes="analyze-btn")
+                dataset_label = gr.State(value=None)
+                with gr.Row():
+                    check = gr.Button("Check News", variant="primary", elem_classes="analyze-btn")
+                    suggest = gr.Button("New suggestion", elem_classes="suggest-btn")
         with gr.Column(scale=5, min_width=300, elem_classes="result-col"):
             output = gr.HTML(value=PLACEHOLDER)
-    check.click(classify, inputs=[title, statement], outputs=output)
-    statement.submit(classify, inputs=[title, statement], outputs=output)
+    check.click(classify, inputs=[title, statement, dataset_label], outputs=output)
+    statement.submit(classify, inputs=[title, statement, dataset_label], outputs=output)
+    suggest.click(suggest_example, outputs=[title, statement, dataset_label, output])
+    demo.load(suggest_example, outputs=[title, statement, dataset_label, output])
     gr.HTML(
         "<div style='position:relative;z-index:1'><p class='dataset-title'>Training Dataset</p>"
         "<section class='dataset-grid'><div class='dataset-card'><div class='dataset-icon'>✓</div><div><b>21,417</b><span>True articles</span></div></div>"
